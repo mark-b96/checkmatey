@@ -1,11 +1,38 @@
 import './App.css';
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Chessboard from './components/Chessboard/Chessboard';
-import SubmitButton from './components/SubmitButton/submitButton';
 
 function App() {
-  const [fenRep, setFenRep] = useState("rnbqkbnr/pppppppp/8/2k3k1/2n6/6n1/PP1PPP1P/RNBQKBNR w KQkq - 0 1")
+  const [fenRep, setFenRep] = useState("")
   const [legalMoves, setLegalMoves] = useState({});
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response1 = await fetch(`http://localhost:5669/getInitState`, {
+          method: 'GET',    
+      })
+      const fenRepResult = await response1.json()
+      setFenRep(fenRepResult)
+      
+      const response2 = await fetch(`http://localhost:5669/getMoves?fenRep=${fenRep.replaceAll(" ", "+")}`, {
+        method: 'GET',    
+      })
+      const result = await response2.json()          
+      const resultMap: Record<any, any> = {}
+          
+      for (const [key, value] of Object.entries(result)) {
+          resultMap[key] = value
+        }
+      updateLegalMoves(resultMap)
+    }
+    catch (err) {
+        console.error(err)
+    }
+    };
+  
+    fetchData();
+  }, []);
 
   const updateLegalMoves = (moves: Record<any, any>) => {
     setLegalMoves(moves)
@@ -13,15 +40,41 @@ function App() {
 
   const updateFenRep = (fenRepStr: string) => {
     setFenRep(fenRepStr)
+
+    const fetchData = async () => {
+      try{
+          const response = await fetch(`http://localhost:5669/getMoves?fenRep=${fenRepStr.replaceAll(" ", "+")}`, {
+              method: 'GET',    
+          })
+          const result = await response.json()          
+          const resultMap: Record<any, any> = {}
+              
+          for (const [key, value] of Object.entries(result)) {
+              resultMap[key] = value
+            }
+          console.log("Successfully fetched moves...")
+
+          updateLegalMoves(resultMap)
+      }
+      catch (err) {
+          console.error(err)
+      }
+    }
+    fetchData()
   };
 
 
-  return (
-    <div id="app">
-      <SubmitButton updateMoves={updateLegalMoves} fenRep={fenRep}></SubmitButton>
-      <Chessboard fenRep={fenRep} legalMoves={legalMoves} updateFenRep={updateFenRep}/>
-    </div>
-  );
+  if (!fenRep)
+  {
+    return <div>Loading...</div>;
+  }
+  else{
+    return (
+      <div id="app">
+        <Chessboard fenRep={fenRep} legalMoves={legalMoves} updateFenRep={updateFenRep}/>
+      </div>
+    );
+  }
 }
 
 export default App;

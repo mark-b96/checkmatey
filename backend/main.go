@@ -11,9 +11,26 @@ import (
 )
 
 
-func getMoves(w http.ResponseWriter, r *http.Request){
-	inputFenRep := r.URL.Query().Get("fenRep")
-	
+func (fS *Fenstate) getInitState(w http.ResponseWriter, r *http.Request){
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(fS.FenRep); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+
+func (fS *Fenstate) getMoves(w http.ResponseWriter, r *http.Request){
+	inputFenRep := fS.FenRep
+
+	if r.URL.Query().Get("fenRep") != ""{
+		inputFenRep = r.URL.Query().Get("fenRep")
+	}
+		
 	var updatedFenRep = ""
 
 	for index:= range inputFenRep{
@@ -26,18 +43,17 @@ func getMoves(w http.ResponseWriter, r *http.Request){
 			updatedFenRep+=string(inputFenRep[index])
 		}
 	}
-	log.Println("updatedFenRep: ", updatedFenRep)
+	
+	fS.FenRep = updatedFenRep
 
 	cb := fenToChessboard(updatedFenRep)
-	fenRepArr := strings.Split(updatedFenRep,`/`)
-	auxData := strings.Split(fenRepArr[len(fenRepArr)-1], ` `)
 
-	parsedTurn, castlingData, enPasSqr, halfMoves, fullMoves := auxData[1], auxData[2], auxData[3], auxData[4], auxData[5]
-	log.Println("DATA: ", parsedTurn, castlingData, enPasSqr, halfMoves, fullMoves)
+	turn := fS.Turn
 	
-	turn := 1
-	if parsedTurn == "w"{
-		turn = 0
+	if fS.Turn == 1{
+		fS.Turn = 0
+	}else{
+		fS.Turn = 1
 	}
 	
 	moves := calculateMoves(cb, turn)
@@ -70,6 +86,15 @@ type Square struct {
 
 type Chessboard struct {
 	board [8][8]Square
+}
+
+type Fenstate struct {
+	FenRep string
+	Turn int
+	CastlingStatus string
+	EnPass string
+	HalfMoves int
+	FullMoves int
 }
 
 func fenToChessboard(fenRep string) Chessboard{
@@ -137,8 +162,6 @@ func calculateMoves(cb Chessboard, turn int) map[string][][]int{
 
 	outputMap := map[string][][]int{}
 
-	// enPasSqr := []int{2, 3}
-
 	for row:= range len(cb.board){
 		for col:= range len(cb.board[0]){
 			cbSqr := cb.board[row][col]
@@ -150,7 +173,6 @@ func calculateMoves(cb Chessboard, turn int) map[string][][]int{
 			if len(pieceSymbol)==0 || pieceColour != turn{
 				continue
 			}
-			log.Println(pieceSymbol, pieceColour)
 			moves:= [][2]int{}
 
 			pawnSymbol:=""
@@ -178,24 +200,16 @@ func calculateMoves(cb Chessboard, turn int) map[string][][]int{
 					if posCol>=0 && posRow>=0 && posCol<=7 && posRow<=7{
 						targetPiece := cb.board[posRow][posCol].Piece
 						if targetPiece.Symbol==""{
-							if pieceSymbolLower == "p" && move[1] != 0  ||  //&& slices.Equal(enPasSqr, posSqr)
-							pawnSymbol=="pw" && move[0]==-2 && move[1]==0 && row!=6 || 
-							pawnSymbol=="pb" && move[0]==2 && move[1]==0 && row!=1 {
-								log.Println("Pawn")
-							}else{
+							if !(pieceSymbolLower == "p" && move[1] != 0) &&
+							!(pawnSymbol=="pw" && move[0]==-2 && move[1]==0 && row!=6) &&
+							!(pawnSymbol=="pb" && move[0]==2 && move[1]==0 && row!=1) {
 								posSqrs = append(posSqrs, posSqr)
-							}				
-
+							}
 						}else{
-							if pieceSymbolLower == "p" && move[1] == 0{
-								log.Println("Pawn")
-							}else{
-								if targetPiece.Colour != cbPiece.Colour{
-									posSqrs = append(posSqrs, posSqr)
-									log.Println("CAPTURE MOVE")
-								}
+							if targetPiece.Colour != cbPiece.Colour && 
+							!(pieceSymbolLower == "p" && move[1] == 0){
+								posSqrs = append(posSqrs, posSqr)
 							}	
-						
 						}
 					}
 				}else{				
@@ -207,7 +221,6 @@ func calculateMoves(cb Chessboard, turn int) map[string][][]int{
 						}else{
 							if targetPiece.Colour != cbPiece.Colour{
 								posSqrs = append(posSqrs, newPosSqr)
-								log.Println("CAPTURE MOVE")
 							}
 							break
 						}
@@ -218,10 +231,6 @@ func calculateMoves(cb Chessboard, turn int) map[string][][]int{
 			}
 			rowColStr := fmt.Sprintf("%d,%d", row, col)
 			outputMap[rowColStr] = posSqrs
-			
-			if len(posSqrs)>0{
-				log.Printf("%s: %v ", rowColStr, outputMap[rowColStr])
-			}
 		}			
 	}
 	return outputMap
@@ -229,7 +238,23 @@ func calculateMoves(cb Chessboard, turn int) map[string][][]int{
 }
 
 func main() {
-	http.HandleFunc("/getMoves", getMoves)
+	initFen := "rnbqkbnr/pppppppp/8/2k3k1/2n6/6n1/PP1PPP1P/RNBQKBNR w KQkq - 0 1"
+	fenRepArr := strings.Split(initFen,`/`)
+	auxData := strings.Split(fenRepArr[len(fenRepArr)-1], ` `)
+
+	parsedTurn, castlingData, enPasSqr, halfMoves, fullMoves := auxData[1], auxData[2], auxData[3], auxData[4], auxData[5]
+
+	halfMovesInt, _ := strconv.Atoi(halfMoves)
+	fullMovesInt, _ := strconv.Atoi(fullMoves)
+	turnInt := 1
+	if parsedTurn == "w"{
+		turnInt = 0
+	}
+
+
+	initFenRep := &Fenstate{FenRep: initFen, Turn: turnInt, CastlingStatus: castlingData, EnPass: enPasSqr, HalfMoves: halfMovesInt, FullMoves: fullMovesInt} 
+	http.HandleFunc("/getMoves", initFenRep.getMoves)
+	http.HandleFunc("/getInitState", initFenRep.getInitState)
 	log.Println("Starting server on port 5669...")
 	http.ListenAndServe(":5669", nil)
 }

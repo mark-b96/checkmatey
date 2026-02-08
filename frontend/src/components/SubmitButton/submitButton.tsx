@@ -7,7 +7,6 @@ export default function SubmitButton({updateMoves, fenRep}: Props) {
     function submitRequest(): void {
         const fetchData = async () => {
             try{
-                console.log("FENREP:", fenRep)
                 const response = await fetch(`http://localhost:5669/getMoves?fenRep=${fenRep.replaceAll(" ", "+")}`, {
                     method: 'GET',    
                 })
