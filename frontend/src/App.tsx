@@ -15,7 +15,7 @@ function App() {
       const fenRepResult = await response1.json()
       setFenRep(fenRepResult)
       
-      const response2 = await fetch(`http://localhost:5669/getMoves?fenRep=${fenRep.replaceAll(" ", "+")}`, {
+      const response2 = await fetch(`http://localhost:5669/getMoves?userMove=`, {
         method: 'GET',    
       })
       const result = await response2.json()          
@@ -38,12 +38,11 @@ function App() {
     setLegalMoves(moves)
   };
 
-  const updateFenRep = (fenRepStr: string) => {
-    setFenRep(fenRepStr)
+  const updateFenRep = (userMove: string) => {
 
     const fetchData = async () => {
       try{
-          const response = await fetch(`http://localhost:5669/getMoves?fenRep=${fenRepStr.replaceAll(" ", "+")}`, {
+          const response = await fetch(`http://localhost:5669/getMoves?userMove=${userMove}`, {
               method: 'GET',    
           })
           const result = await response.json()          

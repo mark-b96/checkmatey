@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 interface Props {
     fenRep: string
     legalMoves: Record<string, number[][]>
-    updateFenRep: (fenRepStr: string) => void 
+    updateFenRep: (userMove: string) => void 
 }
 
 const pieceMap: Record<string, string> = {
@@ -84,10 +84,13 @@ export default function Chessboard({fenRep, legalMoves, updateFenRep}: Props) {
     function updateFenState(srcSquare: string, dstSquare: string) {
         let fenRepList: string[] = fenRepVis.split("/")
 
-        let updatedFenRep: string = ""
         let updatedFenRepVis: string = ""
         const [srcRow, srcCol] = srcSquare.split(",")
         var srcPiece: string = fenRepList[parseInt(srcRow)][parseInt(srcCol)]
+
+
+        var userMove = `${srcPiece}:${srcSquare}-${dstSquare}`
+        updateFenRep(userMove)
      
         for (let row = 0; row < 8; row++){
             let emptySquares: number = 0
@@ -96,11 +99,10 @@ export default function Chessboard({fenRep, legalMoves, updateFenRep}: Props) {
                 let fenSqr: string = fenRow[col]
                 let currSqr: string = `${row},${col}`
                 
-                if (fenSqr && pieceMap.hasOwnProperty(fenSqr) && currSqr!=dstSquare){   
+                if (fenSqr && pieceMap.hasOwnProperty(fenSqr) && currSqr!==dstSquare){   
                     if (currSqr===srcSquare){
                         emptySquares += 1
                         if (emptySquares > 0){
-                            updatedFenRep += emptySquares
                             updatedFenRepVis += emptySquares.toString().repeat(emptySquares)
                             emptySquares = 0
                         }  
@@ -108,21 +110,17 @@ export default function Chessboard({fenRep, legalMoves, updateFenRep}: Props) {
                     }
                     else {
                         if (emptySquares > 0){
-                            updatedFenRep += emptySquares
                             updatedFenRepVis += emptySquares.toString().repeat(emptySquares)
                             emptySquares = 0
-                        }
-                        updatedFenRep+=fenSqr  
+                        } 
                         updatedFenRepVis+=fenSqr
                     }
                 } 
                 else if (currSqr===dstSquare){
                     if (emptySquares > 0){
-                        updatedFenRep += emptySquares
                         updatedFenRepVis += emptySquares.toString().repeat(emptySquares)
                         emptySquares = 0
                     }
-                    updatedFenRep += srcPiece
                     updatedFenRepVis += srcPiece
                 }
                 else {
@@ -130,16 +128,12 @@ export default function Chessboard({fenRep, legalMoves, updateFenRep}: Props) {
                 }
             }
             if (emptySquares > 0){
-                updatedFenRep += emptySquares
                 updatedFenRepVis += emptySquares.toString().repeat(emptySquares)
             }
-            updatedFenRep += "/"
             updatedFenRepVis += "/"
-
         }
  
         setFenRepVis(updatedFenRepVis)
-        updateFenRep(updatedFenRep)
     }
 
     function getLegalMoves(e: React.MouseEvent): void {
@@ -148,7 +142,6 @@ export default function Chessboard({fenRep, legalMoves, updateFenRep}: Props) {
             var currSquare: string = element.id
             for (let i = 0; i < prevMoves.length; i++) {
                 if (currSquare === prevMoves[i].toString()) {
-                    
                     updateFenState(prevSquareId, currSquare)
                 }
             }
