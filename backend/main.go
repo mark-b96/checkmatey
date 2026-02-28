@@ -12,6 +12,11 @@ import (
 )
 
 
+type BoardState struct {
+	Moves   map[string][][]int `json:"moves"`
+	FenRep  string  `json:"fenrep"`
+}
+
 func (fS *Fenstate) getInitState(w http.ResponseWriter, r *http.Request){
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -46,7 +51,9 @@ func (fS *Fenstate) getMoves(w http.ResponseWriter, r *http.Request){
 
 	w.WriteHeader(http.StatusOK)
 
-	if err := json.NewEncoder(w).Encode(moves); err != nil {
+	payload := BoardState{Moves: moves, FenRep: fS.FenRep}
+
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -146,64 +153,101 @@ func updateChessboard(fS * Fenstate, userMove string){
 	cb[srcSquareRowInt][srcSquareColInt].Piece = Piece{}
 	cb[dstSquareRowInt][dstSquareColInt].Piece = Piece{Row: dstSquareRowInt, Col: dstSquareColInt, Colour: pieceColour, Symbol: srcPiece}
 
+	if math.Abs(float64(dstSquareRowInt - srcSquareRowInt))==2{
+		if srcPiece=="p"{
+			enPassSqr := fmt.Sprintf("%d,%d", dstSquareRowInt-1, dstSquareColInt)
+			fS.EnPass = enPassSqr 
+		}
+		if srcPiece=="P"{
+			enPassSqr := fmt.Sprintf("%d,%d", dstSquareRowInt+1, dstSquareColInt)
+			fS.EnPass = enPassSqr 
+		} 
+	}
+
+	if fS.EnPass != "-"{
+		enPassCoords := strings.Split(fS.EnPass, ",")
+
+		enPassRowInt, _ := strconv.Atoi(enPassCoords[0])
+		enPassColInt, _ := strconv.Atoi(enPassCoords[1])
+		
+		if enPassRowInt == dstSquareRowInt && enPassColInt == dstSquareColInt{
+			cb[srcSquareRowInt][dstSquareColInt].Piece = Piece{}
+		}
+	}
+
+
+	if strings.ToLower(srcPiece)=="k"{
+		if math.Abs(float64(dstSquareColInt - srcSquareColInt))==2{
+			if dstSquareColInt == 6{
+				cb[srcSquareRowInt][5].Piece = cb[srcSquareRowInt][7].Piece
+				cb[srcSquareRowInt][7].Piece = Piece{}
+			}
+			if dstSquareColInt == 2{
+				cb[srcSquareRowInt][3].Piece = cb[srcSquareRowInt][0].Piece
+				cb[srcSquareRowInt][0].Piece = Piece{}
+			}
+		}
+	}
+
+	if srcPiece == "k"{
+		fS.CastlingStatus = strings.ReplaceAll(fS.CastlingStatus, "k", "")
+		fS.CastlingStatus = strings.ReplaceAll(fS.CastlingStatus, "q", "")
+
+	}
+	if srcPiece == "K"{
+		fS.CastlingStatus = strings.ReplaceAll(fS.CastlingStatus, "K", "")
+		fS.CastlingStatus = strings.ReplaceAll(fS.CastlingStatus, "Q", "")
+
+	}
+	if srcPiece == "r"{
+		if srcSquareColInt==0{
+			fS.CastlingStatus = strings.ReplaceAll(fS.CastlingStatus, "q", "")
+		}
+		if srcSquareColInt==7{
+			fS.CastlingStatus = strings.ReplaceAll(fS.CastlingStatus, "k", "")
+		}
+	}
+	if srcPiece == "R"{
+		if srcSquareColInt==0{
+			fS.CastlingStatus = strings.ReplaceAll(fS.CastlingStatus, "Q", "")
+		}
+		if srcSquareColInt==7{
+			fS.CastlingStatus = strings.ReplaceAll(fS.CastlingStatus, "K", "")
+		}
+	}
+
+	fS.FenRep = chessboardToFen(cb)
+
 }
 
-func chessboardToFen(cb Chessboard) string{
+func chessboardToFen(cb *[8][8]Square) string{
 	fenRep := ""
-	for row:= range len(cb.board){
-		for col:= range len(cb.board[0]){
-			cbSqr := cb.board[row][col]
+	for row:= range len(cb){
+		emptyCount :=0
+		for col:= range len(cb){
+			cbSqr := cb[row][col]
 			cbPiece := cbSqr.Piece
-			fenRep += cbPiece.Symbol
+
+			if cbPiece == (Piece{}) {
+				emptyCount+=1
+			}else{
+				if emptyCount >0{
+					fenRep += strconv.Itoa(emptyCount)
+				}
+				fenRep += cbPiece.Symbol
+				emptyCount = 0
+			}
+			
+		}
+		if emptyCount >0{
+			fenRep += strconv.Itoa(emptyCount)
 		}
 		fenRep += "/"
 	}
 	return fenRep
 }
 
-func getCastlingStatus(cb Chessboard, fS *Fenstate) string{
-	if fS.CastlingStatus == ""{
-		return ""
-	}
-
-	castlingStr := ""
-
-	if fS.Turn == 0{
-		if (cb.board[7][4].Piece.Symbol == "K"){
-			if (cb.board[7][7].Piece.Symbol == "R") && 
-			cb.board[7][6].Piece.Symbol == "" && 
-			cb.board[7][5].Piece.Symbol == ""{
-				castlingStr += "K"
-			}
-			if (cb.board[7][0].Piece.Symbol == "R") && 
-			cb.board[7][1].Piece.Symbol == "" && 
-			cb.board[7][2].Piece.Symbol == "" &&
-			cb.board[7][3].Piece.Symbol == "" {
-				castlingStr += "Q"
-			}
-		}
-	}else{
-		if (cb.board[0][4].Piece.Symbol == "k"){
-			if (cb.board[0][7].Piece.Symbol == "r") && 
-			cb.board[0][6].Piece.Symbol == "" && 
-			cb.board[0][5].Piece.Symbol == ""{
-				castlingStr += "k"
-			}
-			if (cb.board[0][0].Piece.Symbol == "r") && 
-			cb.board[0][1].Piece.Symbol == "" && 
-			cb.board[0][2].Piece.Symbol == "" &&
-			cb.board[0][3].Piece.Symbol == "" {
-				castlingStr += "q"
-			}
-		}
-	}
-
-	return castlingStr
-
-}
-
-
-func canMovePawn(pawnSymbol string, move [2]int, row int, col int, cb Chessboard, enPassSqr Square, posRow int, posCol int) bool{
+func canMovePawn(pawnSymbol string, move [2]int, row int, col int, cb Chessboard, enPassRow int, enPassCol int, posRow int, posCol int) bool{
 	if move[1] == 0{
 		if pawnSymbol=="pw" && move[0]==-2 && row==6 && cb.board[row-1][col].Piece.Symbol==""{
 			return true
@@ -216,7 +260,7 @@ func canMovePawn(pawnSymbol string, move [2]int, row int, col int, cb Chessboard
 		}
 	}else{
 		if move[1] == 1 || move[1]==-1{		
-			if enPassSqr.Row == posRow && enPassSqr.Col == posCol{
+			if enPassRow == posRow && enPassCol == posCol{
 				return true
 			}
 		}
@@ -263,7 +307,7 @@ func canCastle(pieceSymbol string, move [2]int, castlingStatus string) bool{
 
 func calculateMoves(fS *Fenstate) map[string][][]int{
 	cb := fS.cb
-	// log.Println(cb.board)
+
 	pieceMap := map[string][][2]int {
 		"pb": [][2]int{{1,0}, {2, 0}, {1,1},{1,-1},},
 		"pw": [][2]int{{-1,0}, {-2, 0}, {-1,1},{-1,-1},},
@@ -285,10 +329,18 @@ func calculateMoves(fS *Fenstate) map[string][][]int{
 
 	outputMap := map[string][][]int{}
 
-	castlingStatus := getCastlingStatus(cb, fS)
-	fS.EnPass = "e3"
+	// castlingStatus := getCastlingStatus(cb, fS)
+	
+	enPassRowInt := -1
+	enPassColInt := -1	
 
-	enPassSqr := cb.board[5][4]
+	if fS.EnPass != "-"{
+		enPassCoords := strings.Split(fS.EnPass, ",")
+
+		enPassRowInt, _ = strconv.Atoi(enPassCoords[0])
+		enPassColInt, _ = strconv.Atoi(enPassCoords[1])
+	}
+
 
 	for row:= range len(cb.board){
 		for col:= range len(cb.board[0]){
@@ -332,13 +384,13 @@ func calculateMoves(fS *Fenstate) map[string][][]int{
 								if posRow-row != move[0] || posCol-col != move[1]{
 									log.Println("HERE")
 								}
-								canMovePawn := canMovePawn(pawnSymbol, move, row, col, cb, enPassSqr, posRow, posCol)
+								canMovePawn := canMovePawn(pawnSymbol, move, row, col, cb, enPassRowInt, enPassColInt, posRow, posCol)
 								if canMovePawn{
 									posSqrs = append(posSqrs, posSqr)
 								}
 							}else if pieceSymbolLower=="k"{
 								if (math.Abs(float64(move[1]))>1){
-									canCastle := canCastle(pieceSymbol, move, castlingStatus)		
+									canCastle := canCastle(pieceSymbol, move, fS.CastlingStatus)		
 									if canCastle{
 										posSqrs = append(posSqrs, posSqr)
 									}

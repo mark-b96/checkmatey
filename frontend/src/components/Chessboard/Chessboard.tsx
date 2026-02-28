@@ -1,5 +1,4 @@
 import './Chessboard.css'
-import React, { useState } from 'react'
 
 interface Props {
     fenRep: string
@@ -27,7 +26,7 @@ export default function Chessboard({fenRep, legalMoves, updateFenRep}: Props) {
     let prevSquareId: string = ""
     let board: React.ReactElement[] = []
 
-    var fenRepVisTmp = replaceDigits(fenRep)
+    var fenRepVis = replaceDigits(fenRep)
 
     function replaceDigits(originalString: string): string {
 
@@ -48,20 +47,19 @@ export default function Chessboard({fenRep, legalMoves, updateFenRep}: Props) {
         return newString
     }
 
-    const [fenRepVis, setFenRepVis] = useState(fenRepVisTmp)
-   
     function updateBoard() {
         board = []
         let fenRepList: string[] = fenRepVis.split("/")
+
         for (let row = 0; row < 8; row++){
-            for (let col = 0; col < 8; col++){
-                let fenRow: string = fenRepList[row]
+            let fenRow: string = fenRepList[row]     
+            for (let col = 0; col < 8; col++){     
                 let square: string = fenRow[col]
                 let img = undefined
 
                 if (typeof square !== 'undefined') {
                     img = pieceMap[square as keyof typeof pieceMap]
-                } 
+                }
             
                 if ((row+col) %2===0){
                     board.push(
@@ -75,7 +73,7 @@ export default function Chessboard({fenRep, legalMoves, updateFenRep}: Props) {
                         {img && <div style={{ backgroundImage: `url(${img})` }} className="chess-piece"  id={`${row},${col}`}></div>}
                         </div>
                     )
-                } 
+                }
             }
         }
         return board
@@ -83,57 +81,10 @@ export default function Chessboard({fenRep, legalMoves, updateFenRep}: Props) {
 
     function updateFenState(srcSquare: string, dstSquare: string) {
         let fenRepList: string[] = fenRepVis.split("/")
-
-        let updatedFenRepVis: string = ""
         const [srcRow, srcCol] = srcSquare.split(",")
         var srcPiece: string = fenRepList[parseInt(srcRow)][parseInt(srcCol)]
-
-
         var userMove = `${srcPiece}:${srcSquare}-${dstSquare}`
         updateFenRep(userMove)
-     
-        for (let row = 0; row < 8; row++){
-            let emptySquares: number = 0
-            for (let col = 0; col < 8; col++){
-                let fenRow: string = fenRepList[row]
-                let fenSqr: string = fenRow[col]
-                let currSqr: string = `${row},${col}`
-                
-                if (fenSqr && pieceMap.hasOwnProperty(fenSqr) && currSqr!==dstSquare){   
-                    if (currSqr===srcSquare){
-                        emptySquares += 1
-                        if (emptySquares > 0){
-                            updatedFenRepVis += emptySquares.toString().repeat(emptySquares)
-                            emptySquares = 0
-                        }  
-                        srcPiece = fenSqr
-                    }
-                    else {
-                        if (emptySquares > 0){
-                            updatedFenRepVis += emptySquares.toString().repeat(emptySquares)
-                            emptySquares = 0
-                        } 
-                        updatedFenRepVis+=fenSqr
-                    }
-                } 
-                else if (currSqr===dstSquare){
-                    if (emptySquares > 0){
-                        updatedFenRepVis += emptySquares.toString().repeat(emptySquares)
-                        emptySquares = 0
-                    }
-                    updatedFenRepVis += srcPiece
-                }
-                else {
-                    emptySquares +=1
-                }
-            }
-            if (emptySquares > 0){
-                updatedFenRepVis += emptySquares.toString().repeat(emptySquares)
-            }
-            updatedFenRepVis += "/"
-        }
- 
-        setFenRepVis(updatedFenRepVis)
     }
 
     function getLegalMoves(e: React.MouseEvent): void {

@@ -18,10 +18,11 @@ function App() {
       const response2 = await fetch(`http://localhost:5669/getMoves?userMove=`, {
         method: 'GET',    
       })
-      const result = await response2.json()          
+      const result = await response2.json()
+      console.log(result)         
       const resultMap: Record<any, any> = {}
           
-      for (const [key, value] of Object.entries(result)) {
+      for (const [key, value] of Object.entries(result.moves)) {
           resultMap[key] = value
         }
       updateLegalMoves(resultMap)
@@ -48,11 +49,12 @@ function App() {
           const result = await response.json()          
           const resultMap: Record<any, any> = {}
               
-          for (const [key, value] of Object.entries(result)) {
+          for (const [key, value] of Object.entries(result.moves)) {
               resultMap[key] = value
             }
           console.log("Successfully fetched moves...")
-
+       
+          setFenRep(result.fenrep)
           updateLegalMoves(resultMap)
       }
       catch (err) {
