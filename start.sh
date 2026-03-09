@@ -1,2 +1,2 @@
-go run backend/main.go &
+go run backend/*.go &
 npm start --prefix frontend/
