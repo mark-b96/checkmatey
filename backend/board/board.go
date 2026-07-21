@@ -1,4 +1,4 @@
-package main
+package board
 
 import (
 	"fmt"
@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"encoding/json"
+	"net/http"
 )
 
 type Piece struct {
@@ -23,7 +25,7 @@ type Square struct {
 }
 
 type Chessboard struct {
-	board [8][8]Square
+	Board [8][8]Square
 }
 
 type Fenstate struct {
@@ -33,11 +35,61 @@ type Fenstate struct {
 	EnPass string
 	HalfMoves int
 	FullMoves int
-	cb Chessboard
+	CB Chessboard
+}
+
+type BoardState struct {
+	Moves   map[string][][]int `json:"moves"`
+	FenRep  string  `json:"fenrep"`
 }
 
 
-func initChessboard(fenRep string) Chessboard{
+func (fS *Fenstate) GetInitState(w http.ResponseWriter, r *http.Request){
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(fS.FenRep); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+
+func (fS *Fenstate) GetMoves(w http.ResponseWriter, r *http.Request){
+	userMove := ""
+	if r.URL.Query().Get("userMove") != ""{
+		userMove = r.URL.Query().Get("userMove")
+	}
+
+	UpdateChessboard(fS, userMove)
+
+	moves := CalculateMoves(fS)
+
+	if fS.Turn == 1{
+		fS.Turn = 0
+	}else{
+		fS.Turn = 1
+	}
+
+	fS.EnPass = "-"
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	w.WriteHeader(http.StatusOK)
+
+	payload := BoardState{Moves: moves, FenRep: fS.FenRep}
+
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+
+func InitChessboard(fenRep string) Chessboard{
 	fenRepArr := strings.Split(fenRep,`/`)
 	var currPos [8][8]Square
 	var width = 8
@@ -62,18 +114,18 @@ func initChessboard(fenRep string) Chessboard{
 			currPos[row][col] = newSquare
 		}
 	}
-	newChessboard := Chessboard{board: currPos}
+	newChessboard := Chessboard{Board: currPos}
 
 	return newChessboard
 }
 
 
-func updateChessboard(fS * Fenstate, userMove string){
+func UpdateChessboard(fS *Fenstate, userMove string){
 	if len(userMove)==0{
 		return
 	}
 
-	cb := &fS.cb.board
+	cb := &fS.CB.Board
 	
 	parsedMove := strings.Split(userMove, ":")
 
@@ -166,10 +218,10 @@ func updateChessboard(fS * Fenstate, userMove string){
 		}
 	}
 
-	fS.FenRep = chessboardToFen(cb)
+	fS.FenRep = ChessboardToFen(cb)
 }
 
-func chessboardToFen(cb *[8][8]Square) string{
+func ChessboardToFen(cb *[8][8]Square) string{
 	fenRep := ""
 	for row:= range len(cb){
 		emptyCount :=0
@@ -198,10 +250,10 @@ func chessboardToFen(cb *[8][8]Square) string{
 
 func canMovePawn(pawnSymbol string, move [2]int, row int, col int, cb Chessboard, enPassRow int, enPassCol int, posRow int, posCol int) bool{
 	if move[1] == 0{
-		if pawnSymbol=="pw" && move[0]==-2 && row==6 && cb.board[row-1][col].Piece.Symbol==""{
+		if pawnSymbol=="pw" && move[0]==-2 && row==6 && cb.Board[row-1][col].Piece.Symbol==""{
 			return true
 		}
-		if pawnSymbol=="pb" && move[0]==2 && row==1 && cb.board[row+1][col].Piece.Symbol==""{
+		if pawnSymbol=="pb" && move[0]==2 && row==1 && cb.Board[row+1][col].Piece.Symbol==""{
 			return true
 		}
 		if move[0] == 1 || move[0]==-1{
@@ -260,8 +312,8 @@ func isInCheck() bool{
 	return false
 }
 
-func calculateMoves(fS *Fenstate) map[string][][]int{
-	cb := fS.cb
+func CalculateMoves(fS *Fenstate) map[string][][]int{
+	cb := fS.CB
 
 	pieceMap := map[string][][2]int {
 		"pb": [][2]int{{1,0}, {2, 0}, {1,1},{1,-1},},
@@ -295,9 +347,9 @@ func calculateMoves(fS *Fenstate) map[string][][]int{
 	}
 
 
-	for row:= range len(cb.board){
-		for col:= range len(cb.board[0]){
-			cbSqr := cb.board[row][col]
+	for row:= range len(cb.Board){
+		for col:= range len(cb.Board[0]){
+			cbSqr := cb.Board[row][col]
 			cbPiece := cbSqr.Piece
 			pieceSymbol := cbPiece.Symbol
 			pieceColour := cbPiece.Colour
@@ -334,7 +386,7 @@ func calculateMoves(fS *Fenstate) map[string][][]int{
 
 				if !multiMoves[pieceSymbolLower]{
 					if posCol>=0 && posRow>=0 && posCol<=7 && posRow<=7{
-						targetPiece := cb.board[posRow][posCol].Piece
+						targetPiece := cb.Board[posRow][posCol].Piece
 						if targetPiece.Symbol==""{
 							if pieceSymbolLower=="p"{
 								canMovePawn := canMovePawn(pawnSymbol, move, row, col, cb, enPassRowInt, enPassColInt, posRow, posCol)
@@ -363,7 +415,7 @@ func calculateMoves(fS *Fenstate) map[string][][]int{
 					}
 				}else{				
 					for posCol>=0 && posRow>=0 && posCol<=7 && posRow<=7{
-						targetPiece := cb.board[posRow][posCol].Piece
+						targetPiece := cb.Board[posRow][posCol].Piece
 						newPosSqr := []int{posRow, posCol}
 						if targetPiece.Symbol==""{
 							posSqrs = append(posSqrs, newPosSqr)
@@ -385,3 +437,4 @@ func calculateMoves(fS *Fenstate) map[string][][]int{
 	return outputMap
 
 }
+
